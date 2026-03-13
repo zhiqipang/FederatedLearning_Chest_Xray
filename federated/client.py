@@ -11,7 +11,8 @@ import numpy as np
 from typing import Optional
 
 from models.cnn_model import PneumoniaCNN
-from data.data_loader import load_client_datasets, load_raw_datasets  # 注意导入
+from data.data_loader import load_client_datasets, load_raw_datasets
+from federated.dp import DifferentialPrivacy  # 导入差分隐私模块
 
 class MedicalClient(fl.client.NumPyClient):
     def __init__(
@@ -24,7 +25,7 @@ class MedicalClient(fl.client.NumPyClient):
         local_epochs=5,
         lr=0.001,
         batch_size=32,
-        dp_config: Optional[dict] = None,
+        dp_config: Optional[dict] = None,  # 例如 {'noise_multiplier': 1.0, 'max_grad_norm': 1.0}
     ):
         if device is None:
             self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -43,17 +44,18 @@ class MedicalClient(fl.client.NumPyClient):
         self.criterion = nn.CrossEntropyLoss(weight=class_weights)
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)
 
-        self.dp_config = dp_config
-        self.privacy_engine = None
+        # 差分隐私处理
+        self.dp = None
         if dp_config is not None:
-            from opacus import PrivacyEngine
-            self.privacy_engine = PrivacyEngine()
-            self.model, self.optimizer, self.train_loader = self.privacy_engine.make_private(
-                module=self.model,
-                optimizer=self.optimizer,
-                data_loader=self.train_loader,
+            self.dp = DifferentialPrivacy(
                 noise_multiplier=dp_config['noise_multiplier'],
                 max_grad_norm=dp_config['max_grad_norm'],
+                delta=1e-5
+            )
+            self.model, self.optimizer, self.train_loader = self.dp.make_private(
+                module=self.model,
+                optimizer=self.optimizer,
+                data_loader=self.train_loader
             )
             print(f"差分隐私已启用: noise_multiplier={dp_config['noise_multiplier']}, max_grad_norm={dp_config['max_grad_norm']}")
 
@@ -80,10 +82,11 @@ class MedicalClient(fl.client.NumPyClient):
                 total_loss += loss.item()
         avg_loss = total_loss / len(self.train_loader) / self.local_epochs
 
+        # 如果启用了DP，计算隐私预算
         epsilon = None
-        if self.privacy_engine is not None:
-            epsilon = self.privacy_engine.get_epsilon(delta=1e-5)
-            print(f"本轮训练隐私预算 ε = {epsilon:.2f} (δ=1e-5)")
+        if self.dp is not None:
+            epsilon = self.dp.get_epsilon()
+            print(f"本轮训练隐私预算 ε = {epsilon:.2f} (δ={self.dp.delta})")
 
         metrics = {"loss": avg_loss}
         if epsilon is not None:
@@ -116,8 +119,8 @@ if __name__ == "__main__":
     parser.add_argument("--dp", action="store_true", help="启用差分隐私")
     args = parser.parse_args()
 
-    # 加载该客户端的本地训练集和测试集（测试集作为验证集使用）
-    train_dataset, test_dataset = load_client_datasets(args.client_id)
+    # 加载该客户端的本地训练集（启用数据增强）和测试集（无增强）
+    train_dataset, test_dataset = load_client_datasets(args.client_id, augment_train=True)
     val_dataset = test_dataset  # 用测试集作为本地验证集
 
     # 计算类别权重（基于原始完整训练集，确保全局统一）

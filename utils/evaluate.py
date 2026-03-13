@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.cnn_model import PneumoniaCNN
-from data.data_loader import load_all_client_test_datasets, get_transform
+from data.data_loader import load_all_client_test_datasets  # 不再需要导入 get_transform
 
 def evaluate_model(model, test_loader, device):
     model.eval()
@@ -50,7 +50,7 @@ def evaluate_model(model, test_loader, device):
 def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                              'results', 'models', 'global_model_round_10.pth')
+                              'results', 'models', 'global_model_round_18.pth')
 
     # 加载合并的测试集
     test_dataset = load_all_client_test_datasets(num_clients=3)

@@ -1,0 +1,25 @@
+# 虚拟环境
+venv/
+.venv/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 数据集文件夹
+data/raw/
+data/partitions/
+
+# IDE配置
+.idea/
+*.iml
+
+# 模型输出
+results/models/
+results/logs/
+results/plots/
+
+# 其他临时文件
+*.log
+*.pth
+.DS_Store

@@ -1,56 +1,70 @@
 import os
+import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+import numpy as np
 
-# 基础路径
-PARTITIONS_DIR = 'data/partitions'
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RAW_DATA_DIR = os.path.join(BASE_DIR, 'data', 'raw', 'chest_xray')
+PARTITIONS_DIR = os.path.join(BASE_DIR, 'data', 'partitions')
 
-def get_client_dataloaders(client_id, batch_size=32, num_workers=0):
-    """
-    为指定客户端加载训练和测试 DataLoader
-    client_id: 1, 2, 3
-    batch_size: 批次大小
-    num_workers: 数据加载进程数（Windows建议设为0）
-    """
-    # 训练集路径
-    train_dir = os.path.join(PARTITIONS_DIR, f'client_{client_id}', 'train')
-    test_dir = os.path.join(PARTITIONS_DIR, f'client_{client_id}', 'test')
-
-    # 训练集数据增强与归一化
-    train_transform = transforms.Compose([
-        transforms.Resize((224, 224)),                # 统一尺寸
-        transforms.RandomHorizontalFlip(p=0.5),       # 随机水平翻转
-        transforms.RandomRotation(10),                 # 随机旋转±10度
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406],  # ImageNet 均值
-                             std=[0.229, 0.224, 0.225])   # ImageNet 标准差
-    ])
-
-    # 测试集只做 resize 和归一化
-    test_transform = transforms.Compose([
+def get_transform():
+    return transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225])
     ])
 
-    # 使用 ImageFolder 加载数据
-    train_dataset = datasets.ImageFolder(root=train_dir, transform=train_transform)
-    test_dataset = datasets.ImageFolder(root=test_dir, transform=test_transform)
+def load_raw_datasets(data_dir=RAW_DATA_DIR):
+    """加载原始完整数据集（用于计算类别权重等）"""
+    transform = get_transform()
+    train_dataset = datasets.ImageFolder(
+        root=os.path.join(data_dir, 'train'),
+        transform=transform
+    )
+    val_dataset = datasets.ImageFolder(
+        root=os.path.join(data_dir, 'val'),
+        transform=transform
+    )
+    test_dataset = datasets.ImageFolder(
+        root=os.path.join(data_dir, 'test'),
+        transform=transform
+    )
+    return train_dataset, val_dataset, test_dataset
 
-    # 创建 DataLoader
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                              shuffle=True, num_workers=num_workers,
-                              pin_memory=True)   # GPU 时可加速
-    test_loader = DataLoader(test_dataset, batch_size=batch_size,
-                             shuffle=False, num_workers=num_workers,
-                             pin_memory=True)
+def load_client_datasets(client_id):
+    """
+    加载指定客户端（0-based）的本地训练集和测试集。
+    客户端目录结构：partitions/client_{client_id+1}/{train,test}/NORMAL|PNEUMONIA
+    返回：train_dataset, test_dataset
+    """
+    client_dir = os.path.join(PARTITIONS_DIR, f'client_{client_id+1}')
+    if not os.path.exists(client_dir):
+        raise FileNotFoundError(f"客户端目录不存在: {client_dir}，请先运行 partition_data.py 生成划分。")
+    transform = get_transform()
+    train_dataset = datasets.ImageFolder(
+        root=os.path.join(client_dir, 'train'),
+        transform=transform
+    )
+    test_dataset = datasets.ImageFolder(
+        root=os.path.join(client_dir, 'test'),
+        transform=transform
+    )
+    return train_dataset, test_dataset
 
-    return train_loader, test_loader, train_dataset.classes
-
-# 简单测试（直接运行本文件时执行）
-if __name__ == '__main__':
-    for cid in [1, 2, 3]:
-        train_loader, test_loader, classes = get_client_dataloaders(cid, batch_size=32)
-        print(f"客户端 {cid}: 训练集样本数 = {len(train_loader.dataset)}, "
-              f"测试集样本数 = {len(test_loader.dataset)}, 类别 = {classes}")
+def load_all_client_test_datasets(num_clients=3):
+    """
+    合并所有客户端的测试集，用于全局评估。
+    返回合并后的测试集（ImageFolder 不支持直接合并，需自定义 Dataset 或使用 ConcatDataset）
+    """
+    from torch.utils.data import ConcatDataset
+    test_datasets = []
+    for i in range(num_clients):
+        client_dir = os.path.join(PARTITIONS_DIR, f'client_{i+1}')
+        test_dataset = datasets.ImageFolder(
+            root=os.path.join(client_dir, 'test'),
+            transform=get_transform()
+        )
+        test_datasets.append(test_dataset)
+    return ConcatDataset(test_datasets)

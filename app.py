@@ -1,26 +1,23 @@
 import sys
 import os
-sys.path.insert(0, os.path.dirname(__file__))
-
-import torch
 import gradio as gr
+import torch
 from torchvision import transforms
 from PIL import Image
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE_DIR)
+
 from models.cnn_model import PneumoniaCNN
 
-# 设备
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+MODEL_PATH = os.path.join(BASE_DIR, 'results', 'models', 'global_model_round_10.pth')
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-# 加载训练好的模型
-model_path = 'results/models/global_model_final.pth'
-if not os.path.exists(model_path):
-    raise FileNotFoundError(f"模型文件未找到: {model_path}，请先运行 federated/server.py 训练模型。")
-
-model = PneumoniaCNN().to(device)
-model.load_state_dict(torch.load(model_path, map_location=device))
+model = PneumoniaCNN(num_classes=2)
+model.load_state_dict(torch.load(MODEL_PATH, map_location=device, weights_only=False))
+model.to(device)
 model.eval()
 
-# 定义与训练时相同的预处理
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -28,41 +25,28 @@ transform = transforms.Compose([
                          std=[0.229, 0.224, 0.225])
 ])
 
-# 类别名称
-classes = ['NORMAL', 'PNEUMONIA']
+class_names = ['NORMAL', 'PNEUMONIA']
 
 def predict(image):
-    """输入 PIL 图片，返回诊断结果和置信度"""
-    # 预处理
-    img = transform(image).unsqueeze(0).to(device)  # 添加 batch 维度
-
-    # 推理
+    img_tensor = transform(image).unsqueeze(0).to(device)
     with torch.no_grad():
-        outputs = model(img)
-        probabilities = torch.nn.functional.softmax(outputs[0], dim=0)
-        conf, pred = torch.max(probabilities, 0)
-        pred_class = classes[pred.item()]
-        confidence = conf.item()
+        outputs = model(img_tensor)
+        probabilities = torch.nn.functional.softmax(outputs, dim=1)[0]
+        confidence, predicted = torch.max(probabilities, 0)
+    pred_class = class_names[predicted.item()]
+    confidence_percent = confidence.item() * 100
+    return f"诊断结论: {pred_class}", f"置信度: {confidence_percent:.2f}%"
 
-    # 返回结果字符串和置信度
-    if pred_class == 'PNEUMONIA':
-        result = "肺炎阳性"
-    else:
-        result = "肺炎阴性"
-    return result, f"{confidence:.2%}"
-
-# 创建 Gradio 界面
 iface = gr.Interface(
     fn=predict,
-    inputs=gr.Image(type="pil", label="上传X光片"),
+    inputs=gr.Image(type="pil", label="上传医疗影像"),
     outputs=[
-        gr.Textbox(label="诊断结果"),
+        gr.Textbox(label="诊断结论"),
         gr.Textbox(label="置信度")
     ],
-    title="肺炎X光片辅助诊断系统",
-    description="上传一张胸部X光片，模型将判断是否为肺炎。",
-    examples=[],  # 可添加示例图片路径
+    title="基于联邦学习的医疗影像辅助诊断系统",
+    description="上传一张胸部X光影像，模型将判断是否患有肺炎。",
 )
 
-if __name__ == '__main__':
-    iface.launch()
+if __name__ == "__main__":
+    iface.launch(server_name="0.0.0.0", server_port=7860)

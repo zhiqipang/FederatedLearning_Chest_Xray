@@ -1,0 +1,15 @@
+Optimizer: SGD
+Learning rate: 0.01
+Momentum: 0.9
+Epochs: 50
+Batch size: 32
+Total training time: 3392.40 seconds (56.54 minutes)
+
+accuracy: 0.7692
+precision: 0.7375
+recall: 0.9795
+f1: 0.8414
+auc: 0.9052
+
+total_time_seconds: 3392.40
+total_time_minutes: 56.54

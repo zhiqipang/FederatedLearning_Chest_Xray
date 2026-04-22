@@ -1,9 +1,14 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class PneumoniaCNN(nn.Module):
+    """轻量级3层卷积神经网络，用于肺炎X光图像分类"""
+
     def __init__(self, num_classes=2):
-        super(PneumoniaCNN, self).__init__()
+        super().__init__()
+        # 保持旧版命名，以兼容已训练好的权重文件
         self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1)
         self.pool1 = nn.MaxPool2d(2, 2)
 
@@ -21,6 +26,6 @@ class PneumoniaCNN(nn.Module):
         x = self.pool2(F.relu(self.conv2(x)))
         x = self.pool3(F.relu(self.conv3(x)))
         x = self.global_avg_pool(x)
-        x = x.view(x.size(0), -1)
+        x = torch.flatten(x, 1)
         x = self.fc(x)
         return x

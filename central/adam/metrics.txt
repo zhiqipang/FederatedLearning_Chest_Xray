@@ -1,0 +1,14 @@
+Optimizer: Adam
+Learning rate: 0.001
+Epochs: 50
+Batch size: 32
+Total training time: 4261.22 seconds (71.02 minutes)
+
+accuracy: 0.8285
+precision: 0.7894
+recall: 0.9897
+f1: 0.8783
+auc: 0.9245
+
+total_time_seconds: 4261.22
+total_time_minutes: 71.02

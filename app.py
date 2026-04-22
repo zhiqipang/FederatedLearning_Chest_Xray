@@ -10,7 +10,7 @@ sys.path.insert(0, BASE_DIR)
 
 from models.cnn_model import PneumoniaCNN
 
-MODEL_PATH = os.path.join(BASE_DIR, 'results', 'models', 'global_model_round_10.pth')
+MODEL_PATH = os.path.join(BASE_DIR, 'results', 'models', 'final_model_10_no_dp.pth')
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 model = PneumoniaCNN(num_classes=2)
@@ -44,8 +44,8 @@ iface = gr.Interface(
         gr.Textbox(label="诊断结论"),
         gr.Textbox(label="置信度")
     ],
-    title="基于联邦学习的医疗影像辅助诊断系统",
-    description="上传一张胸部X光影像，模型将判断是否患有肺炎。",
+    title="基于联邦学习的肺炎x光片辅助诊断系统",
+    description="上传一张胸部X光影像，模型将判断是否患有肺炎并给出置信度（仅供参考）",
 )
 
 if __name__ == "__main__":
